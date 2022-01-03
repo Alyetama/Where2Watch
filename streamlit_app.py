@@ -77,8 +77,14 @@ def main(query):
     col1.image(poster)
 
     res_d = get_plot_trailer(movie_full_path)
-    plot = res_d['plot']['description']
-    trailer = res_d['trailer']
+    try:
+        plot = res_d['plot']['description']
+    except Exception:
+        plot = None
+    try:
+        trailer = res_d['trailer']
+    except Exception:
+        trailer = None
 
     with col2:
         st.markdown(f'### Title: `{metdata["title"]}`')
@@ -87,8 +93,9 @@ def main(query):
         st.markdown(
             f'#### IMDb score: `{scoring[0]}` (`{stringfy_values(scoring[1])}`)'
         )
-        st.markdown(f'#### Plot:')
-        st.caption(plot)
+        if plot:
+            st.markdown(f'#### Plot:')
+            st.caption(plot)
 
         streams = []
         if subs:
@@ -123,6 +130,8 @@ if __name__ == '__main__':
     #release-year-2019 > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
     #type-show > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
     #imdb-score-8-2-413-28k > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
+    #available-on > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
+    #plot > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
     </style>""",
                 unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
