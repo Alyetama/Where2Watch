@@ -1,16 +1,15 @@
 import html
 import json
+import os
 import re
-from pathlib import Path
 
 import requests
 import streamlit as st
+import urllib.parse
+from dotenv import load_dotenv
 from justwatch import JustWatch
 
-from config import providers_dict
 
-
-@st.experimental_singleton
 def stringfy_values(num):
     magnitude = 0
     while abs(num) >= 1000:
@@ -19,8 +18,7 @@ def stringfy_values(num):
     return '%.2f%s' % (num, ['', 'K', 'M', 'G', 'T', 'P'][magnitude])
 
 
-@st.experimental_singleton
-def get_plot_trailer(movie_full_path):
+def get_plot(movie_full_path):
     url = 'https://www.justwatch.com' + movie_full_path
     resp = requests.get(url)
     regex_patterns = [('plot', 'description', r'"description":.+?(?=")'),
@@ -31,13 +29,20 @@ def get_plot_trailer(movie_full_path):
         regex = re.compile(pattern)
         match = regex.search(resp.text)
         res = json.loads(html.unescape('{' + match.group(0) + '"}'))
-        if name == 'trailer':
-            if res['provider'] == 'youtube':
-                res = f'https://www.youtube.com/watch?v={res["external_id"]}'
-            else:
-                res = None
         res_d.update({name: res})
     return res_d
+
+
+def get_trailer(title, year, key):
+    q = urllib.parse.quote(f'{title} trailer {year}'.encode('utf8'))
+    data = {'key': key, 'part': 'snippet', 'maxResults': 1, 'q': q}
+    params = '&'.join([f'{k}={v}' for k, v in data.items()])
+    url = f'https://youtube.googleapis.com/youtube/v3/search?{params}'
+    resp = requests.get(url, headers={'Accept': 'application/json'})
+    if resp.status_code == 200:
+        video_id = resp.json()['items'][0]['id']['videoId']
+        video_url = 'https://www.youtube.com/watch?v=' + video_id
+        return video_url
 
 
 def main(query):
@@ -67,7 +72,7 @@ def main(query):
 
     scoring = sorted([
         x['value'] for x in res['items'][0]['scoring']
-        if x['provider_type'] in ['imdb:score', 'imdb:votes']
+        if 'imdb' in x['provider_type']
     ])
 
     col1, col2 = st.columns(2)
@@ -76,25 +81,29 @@ def main(query):
         '{profile}', 's332')
     col1.image(poster)
 
-    res_d = get_plot_trailer(movie_full_path)
+    res_d = get_plot(movie_full_path)
     try:
         plot = res_d['plot']['description']
-    except Exception:
+    except ValueError:
         plot = None
-    try:
-        trailer = res_d['trailer']
-    except Exception:
+
+    if os.getenv('YOUTUBE_API_TOKEN'):
+        trailer = get_trailer(metdata['title'],
+                              metdata['original_release_year'],
+                              os.environ['YOUTUBE_API_TOKEN'])
+    else:
         trailer = None
 
     with col2:
-        st.markdown(f'### Title: `{metdata["title"]}`')
-        st.markdown(f'#### Release year: `{metdata["original_release_year"]}`')
-        st.markdown(f'#### Type: `{metdata["object_type"].capitalize()}`')
-        st.markdown(
-            f'#### IMDb score: `{scoring[0]}` (`{stringfy_values(scoring[1])}`)'
-        )
+        st.subheader(f'Title: `{metdata["title"]}`')
+        st.subheader(f'Release year: `{metdata["original_release_year"]}`')
+        st.subheader(f'Type: `{metdata["object_type"].capitalize()}`')
+        if scoring:
+            str_val = stringfy_values(scoring[1])
+            st.subheader(f'IMDb score: `{scoring[0]}` (`{str_val}`)')
+
         if plot:
-            st.markdown(f'#### Plot:')
+            st.subheader(f'Plot:')
             st.caption(plot)
 
         streams = []
@@ -104,9 +113,9 @@ def main(query):
                 streams.append(
                     f'[![{curr[0]}]({curr[1]})]({sub["urls"]["standard_web"]})'
                 )
-            st.markdown('#### Available on:\n' + ' '.join(streams))
+            st.subheader('Available on:\n' + ' '.join(streams))
         else:
-            st.markdown('---\n#### ❌ Not available...\n---')
+            st.markdown('---\n❌ Not available...\n---')
 
     tc1, tc2 = st.columns([10, 1])
     if trailer:
@@ -126,14 +135,18 @@ if __name__ == '__main__':
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .css-e370rw {visibility: hidden;}
-    #title-the-witcher > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
-    #release-year-2019 > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
-    #type-show > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
-    #imdb-score-8-2-413-28k > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
-    #available-on > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
-    #plot > div:nth-child(1) > a:nth-child(1) {visibility: hidden;}
+    .css-15zrgzn {visibility: hidden;}
+    .css-e16nr0p31 {visibility: hidden;}
     </style>""",
                 unsafe_allow_html=True)
+
+    st.title('🍿 Where2Watch')
+
+    load_dotenv()
+
+    with open('providers.json') as j:
+        providers_dict = json.load(j)
+
     c1, c2, c3 = st.columns(3)
 
     query = c1.text_input(label='', placeholder='Search...')
