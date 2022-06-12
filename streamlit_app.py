@@ -2,10 +2,10 @@ import html
 import json
 import os
 import re
+import urllib.parse
 
 import requests
 import streamlit as st
-import urllib.parse
 from dotenv import load_dotenv
 from justwatch import JustWatch
 
