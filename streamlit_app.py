@@ -144,7 +144,7 @@ if __name__ == '__main__':
 
     load_dotenv()
 
-    with open('providers.json') as j:
+    with open('config/providers.json') as j:
         providers_dict = json.load(j)
 
     c1, c2, c3 = st.columns(3)
